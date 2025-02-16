@@ -35,3 +35,15 @@ exports.loginSchema = joi.object({
           "Password must be 8-20 characters long, include at least one uppercase letter, one lowercase letter, one number, and one special character (@#$%^&*!-_).",
       }),
   });
+exports.acceptCodeSchema = joi.object({
+  email:joi.string()
+  .min(6)
+  .max(60)
+  .required()
+  .email(
+    {
+      tlds:{allow:['com','net']}
+    }
+  ),
+  providedCode:joi.number().required()
+})

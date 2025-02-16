@@ -1,7 +1,9 @@
-const {signupSchema,loginSchema} =require("../middlewares/validator");
+const {signupSchema,loginSchema,acceptCodeSchema} =require("../middlewares/validator");
 const user =  require("../models/userModel");
-const {dohash,dohashValidator} = require("../utils/hashing")
+const {dohash,dohashValidator,hmacProcess} = require("../utils/hashing")
 const jwt  = require("jsonwebtoken");
+const crypto = require("crypto");
+const transport = require("../middlewares/sendMail");
 exports.signup = async (req,res)=>{
     const {email,password} =req.body;
     try{
@@ -63,4 +65,84 @@ exports.logout =async(req,res)=>{
         success:true,
         message:"user have been logged out"
     })
+}
+
+exports.sendVerification =async(req,res)=>{
+    const {email} =req.body;
+    try{
+        const existingUser =await user.findOne({email});
+        if(!existingUser){
+               return res.status(404).json({success:false,message:"user does not exist"});
+        }
+        if(existingUser.verified){
+            return res.status(401).json({
+                success:false,
+                message:"user is already verified"
+            })
+        }
+        const generateOTP = (length = 6) => {
+            return crypto.randomInt(10 ** (length - 1), 10 ** length).toString();
+        };
+
+        const OTP =generateOTP();
+        let info = await transport.sendMail({
+            from:process.env.EMAIL,
+            to:existingUser.email,
+            subject:"Email Verification",
+            html:`<h2>OTP for email verification is ${OTP} </h2>`
+        })
+
+        if(info.accepted[0]==existingUser.email){
+            const hashedCodeValue = hmacProcess(OTP,process.env.OTP_SECERT);
+            existingUser.verificationCode =hashedCodeValue;
+            existingUser.verificationCodeValidation = Date.now();
+            existingUser.save();
+            return res.status(200).json({
+                success:true,
+                message:"OTP has been sent to your email",
+                existingUser
+            })
+        }
+        res.status(400).json({ success: false, message: 'Code sent failed!' });
+    }catch(err){
+        console.log(err);
+    }
+}
+exports.verifyVerificationCode = async(req,res)=>{
+    const {email,providedCode} = req.body;
+    try{
+         const {error,value} = acceptCodeSchema.validate({email,providedCode});
+         if(error){
+            return res.status(401).json({success:false,message:error.details[0].message});
+         }
+         const codeValue = providedCode.toString();
+         const existingUser = await user.findOne({email}).select('+verificationCode +verificationCodeValidation');
+         if(!existingUser){
+            return res.status(401).json(
+                {success:false,meassge:"user does not exist"}
+            )
+         }
+         if(existingUser.verified){
+            return res.status(400).json({success:true,message:"your are already verified"});
+         }
+         if(!existingUser.verificationCode || !existingUser.verificationCodeValidation){
+            return res.status(400).json({success:false,message:"No code found"});
+         }
+         if(Date.now()-existingUser.verificationCodeValidation>5*60*1000){
+            return res.status(400).json({success:false,message:"Code expired"});
+         }
+         const hashedCodeValue = hmacProcess(codeValue,process.env.OTP_SECERT);
+         if(hashedCodeValue === existingUser.verificationCode){
+            existingUser.verified =true;
+            existingUser.verificationCode =undefined;
+            existingUser.verificationCodeValidation =undefined;
+            existingUser.save();
+            return res.status(200).json({success:true ,message:"User verification successful"});
+         }
+         return res.status(400).json(
+            {success:false,meassge:"something unaccepted happened",hashedCodeValue,existingUser}
+        )
+     }catch(error){
+        console.log(error);
+    }
 }
