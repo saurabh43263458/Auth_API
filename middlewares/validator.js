@@ -47,3 +47,29 @@ exports.acceptCodeSchema = joi.object({
   ),
   providedCode:joi.number().required()
 })
+exports.changePasswordSchema = joi.object({
+  newPassword:joi.string()
+       .required()
+       .pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@#$%^&*!-_])[A-Za-z\\d@#$%^&*!-_]{8,20}$")),
+  oldPassword:joi.string()
+           .required()
+           .pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@#$%^&*!-_])[A-Za-z\\d@#$%^&*!-_]{8,20}$")),
+
+})
+
+exports.acceptFpCodeSchema = joi.object({
+  email:joi.string()
+  .min(6)
+  .max(60)
+  .required()
+  .email(
+    {
+      tlds:{allow:['com','net']}
+    }
+  ),
+  providedCode:joi.number().required(),
+  newPassword:joi.string()
+       .required()
+       .pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@#$%^&*!-_])[A-Za-z\\d@#$%^&*!-_]{8,20}$")),
+
+})
